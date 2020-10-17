@@ -214,9 +214,21 @@ print(type(agents))
 # In[]:
 
 
-subsetPercent = 1 #1*10**-2
+subsetPercent = 1 #1*10**-4
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
+
+
+# In[]:
+
+
+test = agents[:5]
+
+
+# In[]:
+
+
+test[0]
 
 
 # In[]:
@@ -267,12 +279,10 @@ def normalizeAgents(agents):
     for i in range(0, len(dataForNormalization)):
         pb.end()
         data = dataForNormalization[i]
-        mean = np.mean(data)
-        std = np.std(data)
+        min_ = np.min(data)
+        max_ = np.max(data)
         print("max[{}]".format(i),np.max(data))
         print("min[{}]".format(i),np.min(data))
-        print("mean[{}]".format(i),mean)
-        print("std[{}]".format(i),std, "\n")
         
         for j in range(0, len(agents)):
             pb.check(i * j)
@@ -289,7 +299,7 @@ def normalizeAgents(agents):
                 normalizedData = normalizedAgent[k]
                 
                 feature = data[i]
-                normalizedFeature = (feature - mean) / std
+                normalizedFeature = (feature - min_) / (max_ - min_)
                 if i == 0 and first:
                     print(feature)
                     print(normalizedFeature)
