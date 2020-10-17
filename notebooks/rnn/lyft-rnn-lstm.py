@@ -214,21 +214,9 @@ print(type(agents))
 # In[]:
 
 
-subsetPercent = 1 #1*10**-4
+subsetPercent = 1 #1*10**-2
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
-
-
-# In[]:
-
-
-test = agents[:5]
-
-
-# In[]:
-
-
-test[0]
 
 
 # In[]:
