@@ -269,8 +269,8 @@ def normalizeAgents(agents):
         data = dataForNormalization[i]
         min_ = np.min(data)
         max_ = np.max(data)
-        print("max[{}]".format(i),np.max(data))
-        print("min[{}]".format(i),np.min(data))
+        print("max[{}]".format(i),max_)
+        print("min[{}]".format(i),min_,"\n")
         
         for j in range(0, len(agents)):
             pb.check(i * j)
