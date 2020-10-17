@@ -3,6 +3,8 @@
 
 # In[]:
 
+#/c/Users/YahelNachum/AppData/Local/Programs/Python/Python38-32/Scripts/jupyter-nbconvert.exe --to script lyft-rnn-lstm.ipynb
+#cat lyft-rnn-lstm.py | sed -e 's/# *In\[ *[0-9]* *\] *: */# In[]:/' >temp.py; mv temp.py lyft-rnn-lstm.py
 
 import gc
 import os
