@@ -3,6 +3,8 @@
 
 # In[]:
 
+#/c/Users/YahelNachum/AppData/Local/Programs/Python/Python38-32/Scripts/jupyter-nbconvert.exe --to script lyft-rnn-lstm.ipynb
+#cat lyft-rnn-lstm.py | sed -e 's/# *In\[ *[0-9]* *\] *: */# In[]:/' >temp.py; mv temp.py lyft-rnn-lstm.py
 
 import gc
 import os
@@ -157,11 +159,14 @@ class ProgressBar:
             
             print(percentageStr + remainingStr + elapsedStr + totalStr, end="")
 
+    def end(self):
+        print()
+
 
 # In[]:
 
 
-def getAgentsChunked(dataset, subsetPercent=1, chunks=2):
+def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
 
     datasetLength = round(len(dataset) * subsetPercent)
     chunkSize = round(datasetLength / chunks)
@@ -199,39 +204,6 @@ def getAgentsChunked(dataset, subsetPercent=1, chunks=2):
 # In[]:
 
 
-def getAgents(dataset, subsetPercent=1):
-
-    datasetLength = round(len(dataset) * subsetPercent)
-    pb = ProgressBar(datasetLength)
-    pb.start()
-
-    agents = []
-    for i in range(0, datasetLength):
-
-        agent = dataset[i]
-        track_id = agent[4]
-        
-        if track_id >= len(agents):
-            agents.append([])
-        
-        data = []
-        centroid = agent[0]
-        yaw = agent[2]
-        velocity = agent[3]
-        data.append(centroid[0])
-        data.append(centroid[1])
-        data.append(yaw)
-        data.append(velocity[0])
-        data.append(velocity[1])
-        agents[int(track_id)-1].append(data)
-        pb.check(i, True)
-
-    return agents
-
-
-# In[]:
-
-
 print(zarr_dataset.agents, "\n")
 print(type(zarr_dataset.agents[0][0][0]))
 print(type(zarr_dataset.agents[0][0]))
@@ -244,17 +216,9 @@ print(type(agents))
 # In[]:
 
 
-subsetPercent = 1 #1*10**-1
+subsetPercent = 1 #1*10**-2
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
-
-
-# In[]:
-
-
-subsetPercent = 1*10**-3
-print(subsetPercent)
-agents = getAgents(zarr_dataset.agents, subsetPercent)
 
 
 # In[]:
@@ -284,15 +248,92 @@ plotAgents(agents)
 # In[]:
 
 
+def normalizeAgents(agents):
+    dataForNormalization = []
+    pb = ProgressBar(len(agents))
+    pb.start()
+    for agent in agents:
+        pb.check(0, True)
+        for data in agent:
+            for i in range(0, len(data)):
+                feature = data[i]
+                if i >= len(dataForNormalization):
+                    dataForNormalization.append([])
+                dataForNormalization[i].append(feature)
+        
+    
+    first = True
+    normalizedAgents = []
+    pb = ProgressBar(len(dataForNormalization) * len(agents))
+    pb.start()
+    for i in range(0, len(dataForNormalization)):
+        pb.end()
+        data = dataForNormalization[i]
+        mean = np.mean(data)
+        std = np.std(data)
+        print("max[{}]".format(i),np.max(data))
+        print("min[{}]".format(i),np.min(data))
+        print("mean[{}]".format(i),mean)
+        print("std[{}]".format(i),std, "\n")
+        
+        for j in range(0, len(agents)):
+            pb.check(i * j)
+            if j >= len(normalizedAgents):
+                normalizedAgents.append([])
+                
+            agent = agents[j]
+            normalizedAgent = normalizedAgents[j]
+            
+            for k in range(0, len(agent)):
+                if k >= len(normalizedAgent):
+                    normalizedAgent.append([])
+                data = agent[k]
+                normalizedData = normalizedAgent[k]
+                
+                feature = data[i]
+                normalizedFeature = (feature - mean) / std
+                if i == 0 and first:
+                    print(feature)
+                    print(normalizedFeature)
+                    first = False
+                
+                if i >= len(normalizedData):
+                    normalizedData.append(0)
+                normalizedData[i] = normalizedFeature
+    return normalizedAgents
+
+
+# In[]:
+
+
+import copy
+
+
+# In[]:
+
+
+normalizedAgents = normalizeAgents(agents)
+
+
+# In[]:
+
+
+print(len(agents))
+print(len(normalizedAgents),"\n")
+
+print(agents[0][0][0])
+print(normalizedAgents[0][0][0],"\n")
+
+
+# In[]:
+
+
 def printAgentsInfo(agents, limit):
     print("len(agents)", len(agents), "\n")
 
     agentCentroidLengths = []
     agentsOverLimit = []
     for agent in agents:
-        if len(agent) == 0:
-            #print(i)
-            continue
         agentCentroidLengths.append(len(agent))
         if len(agent) > limit:
             agentsOverLimit.append(agent)
@@ -312,7 +353,7 @@ def printAgentsInfo(agents, limit):
 
 
 limit = 10
-agentsOverLimit = printAgentsInfo(agents, limit)
+agentsOverLimit = printAgentsInfo(normalizedAgents, limit)
 
 
 # In[]:
@@ -404,6 +445,13 @@ def reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlat
 # In[]:
 
 
+allTrainingSetsFlattened_Input = allTrainingSetsFlattened_X
+allTrainingSetsFlattened_Output = allTrainingSetsFlattened_Y
+
+
+# In[]:
+
+
 allTrainingSetsFlattened_Input, allTrainingSetsFlattened_Output = reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y)
 
 
@@ -434,8 +482,30 @@ regressor.compile(optimizer='rmsprop',loss='mean_squared_error')
 # In[]:
 
 
+from tensorflow import keras
+
+
+# In[]:
+
+
 # Fitting to the training set
-regressor.fit(allTrainingSetsFlattened_Input,allTrainingSetsFlattened_Output,epochs=2,batch_size=32)
+
+class CustomCallback(keras.callbacks.Callback):
+    
+    def __init__(self):
+        self.epoch = 0
+        
+    def on_epoch_end(self, epoch, logs=None):
+        keys = list(logs.keys())
+        print("Epoch: {}             loss: {}\n".format(self.epoch, logs['loss']), end="")
+        self.epoch = epoch
+
+    def on_train_batch_end(self, batch, logs=None):
+        keys = list(logs.keys())
+        if batch % 100 == 0:
+            print("Epoch: {} batchs: {}% loss: {}\r".format(self.epoch, round(batch / self.params['steps'] * 100), logs['loss']), end="")
+
+regressor.fit(allTrainingSetsFlattened_Input,allTrainingSetsFlattened_Output,epochs=2,batch_size=128,verbose=0,callbacks=[CustomCallback()])
 
 
 # In[]:
@@ -456,9 +526,9 @@ print(len(zarr_dataset_test.agents))
 # In[]:
 
 
-subsetPercent = 1*10**-4
+subsetPercent = 1*10**-3
 print(subsetPercent)
-agentsTest = getAgents(zarr_dataset_test.agents, subsetPercent)
+agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000)
 
 
 # In[]:
@@ -470,7 +540,13 @@ plotAgents(agents)
 # In[]:
 
 
-agentsTestOverLimit = printAgentsInfo(agentsTest, limit)
+normalizedAgentsTest = normalizeAgents(agentsTest)
+
+
+# In[]:
+
+
+agentsTestOverLimit = printAgentsInfo(normalizedAgentsTest, limit)
 
 
 # In[]:
@@ -496,7 +572,7 @@ allTestingSetsFlattened_Input, allTestingSetsFlattened_Output = reshapeFlattened
 
 max = len(allTestingSetsFlattened_Input)
 print(max)
-chunkSize = 100
+chunkSize = 1000
 pb = ProgressBar(max)
 pb.start()
 predictedTestAgentCentroid = np.empty((1,5))
@@ -520,14 +596,8 @@ print(len(predictedTestAgentCentroid))
 randomSamples = 10
 for i in range(0, len(predictedTestAgentCentroid), round(len(predictedTestAgentCentroid) / randomSamples)):
     testSet = allTestingSetsFlattened_Input[i]
-    print(testSet[len(testSet) - 1])
-    print(predictedTestAgentCentroid[i])
-
-
-# In[]:
-
-
-
+    print(testSet[0][0])
+    print(predictedTestAgentCentroid[i][0],"\n")
 
 
 # In[]:
