@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[]:
+# In[1]:
 
-#/c/Users/YahelNachum/AppData/Local/Programs/Python/Python38-32/Scripts/jupyter-nbconvert.exe --to script lyft-rnn-lstm.ipynb
 
 import gc
 import os
@@ -43,7 +42,7 @@ import catboost as cb
 pd.set_option('max_columns', 50)
 
 
-# In[]:
+# In[2]:
 
 
 import zarr
@@ -68,7 +67,7 @@ rc('animation', html='jshtml')
 print("l5kit version:", l5kit.__version__)
 
 
-# In[]:
+# In[3]:
 
 
 # Importing the libraries
@@ -84,20 +83,20 @@ import math
 from sklearn.metrics import mean_squared_error
 
 
-# In[]:
+# In[4]:
 
 
 import time
 from datetime import datetime
 
 
-# In[]:
+# In[5]:
 
 
 os.environ["L5KIT_DATA_FOLDER"] = "/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
 
 
-# In[]:
+# In[6]:
 
 
 dm = LocalDataManager()
@@ -107,7 +106,15 @@ zarr_dataset.open()
 print(zarr_dataset)
 
 
-# In[]:
+# In[7]:
+
+
+print(zarr_dataset.agents)
+print(zarr_dataset.agents.shape)
+n = zarr_dataset.agents.shape
+
+
+# In[8]:
 
 
 # helper to convert a timedelta to a string (dropping milliseconds)
@@ -151,7 +158,45 @@ class ProgressBar:
             print(percentageStr + remainingStr + elapsedStr + totalStr, end="")
 
 
-# In[]:
+# In[40]:
+
+
+def getAgentsChunked(dataset, subsetPercent=1, chunks=2):
+
+    datasetLength = round(len(dataset) * subsetPercent)
+    chunkSize = round(datasetLength / chunks)
+    
+    pb = ProgressBar(datasetLength)
+    pb.start()
+
+    agents = []
+    for i in range(0, datasetLength, chunkSize):
+
+        agentsSubset = dataset[i:i+chunkSize]
+        for j in range(0,len(agentsSubset)):
+
+            agent = agentsSubset[j]
+            track_id = agent[4]
+
+            if track_id >= len(agents):
+                agents.append([])
+
+            data = []
+            centroid = agent[0]
+            yaw = agent[2]
+            velocity = agent[3]
+            data.append(centroid[0])
+            data.append(centroid[1])
+            data.append(yaw)
+            data.append(velocity[0])
+            data.append(velocity[1])
+            agents[int(track_id)-1].append(data)
+        pb.check(i, True)
+
+    return agents
+
+
+# In[41]:
 
 
 def getAgents(dataset, subsetPercent=1):
@@ -169,22 +214,50 @@ def getAgents(dataset, subsetPercent=1):
         if track_id >= len(agents):
             agents.append([])
         
+        data = []
         centroid = agent[0]
-        agents[int(track_id)-1].append(centroid)
-        pb.check(i)
+        yaw = agent[2]
+        velocity = agent[3]
+        data.append(centroid[0])
+        data.append(centroid[1])
+        data.append(yaw)
+        data.append(velocity[0])
+        data.append(velocity[1])
+        agents[int(track_id)-1].append(data)
+        pb.check(i, True)
 
     return agents
 
 
-# In[]:
+# In[10]:
 
 
-subsetPercent = 1*10**-1 #1*10**-2
+print(zarr_dataset.agents, "\n")
+print(type(zarr_dataset.agents[0][0][0]))
+print(type(zarr_dataset.agents[0][0]))
+print(type(zarr_dataset.agents[0]))
+print(type(zarr_dataset.agents))
+agents = []
+print(type(agents))
+
+
+# In[47]:
+
+
+subsetPercent = 1 #1*10**-1
+print(subsetPercent)
+agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
+
+
+# In[42]:
+
+
+subsetPercent = 1*10**-3
 print(subsetPercent)
 agents = getAgents(zarr_dataset.agents, subsetPercent)
 
 
-# In[]:
+# In[49]:
 
 
 def plotAgents(agents):
@@ -202,13 +275,13 @@ def plotAgents(agents):
         pb.check(i)
 
 
-# In[]:
+# In[50]:
 
 
 plotAgents(agents)
 
 
-# In[]:
+# In[51]:
 
 
 def printAgentsInfo(agents, limit):
@@ -235,20 +308,24 @@ def printAgentsInfo(agents, limit):
     return agentsOverLimit
 
 
-# In[]:
+# In[52]:
 
 
 limit = 10
 agentsOverLimit = printAgentsInfo(agents, limit)
 
 
-# In[]:
+# In[55]:
 
 
 def getTrainingSets(agents, limit):
     allTrainingSets = []
     totalNumberOfTrainingSets = 0
-    for agent in agentsOverLimit:
+    
+    pb = ProgressBar(len(agentsOverLimit))
+    pb.start()
+    for i in range(0, len(agentsOverLimit)):
+        agent = agentsOverLimit[i]
         agentTrainingSets = []
         for i in range(limit, len(agent)-1):
             agentTrainingSet = []
@@ -264,6 +341,7 @@ def getTrainingSets(agents, limit):
             totalNumberOfTrainingSets = totalNumberOfTrainingSets + 1
 
         allTrainingSets.append(agentTrainingSets)
+        pb.check(i)
 
     print("len(allTrainingSets)", len(allTrainingSets))
     print("len(allTrainingSets[0])",len(allTrainingSets[0]), "\n")
@@ -275,13 +353,13 @@ def getTrainingSets(agents, limit):
     return allTrainingSets
 
 
-# In[]:
+# In[56]:
 
 
 allTrainingSets = getTrainingSets(agentsOverLimit, limit)
 
 
-# In[]:
+# In[57]:
 
 
 def flattenTrainingSets(allTrainingSets):
@@ -295,13 +373,13 @@ def flattenTrainingSets(allTrainingSets):
     return allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y
 
 
-# In[]:
+# In[58]:
 
 
 allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y = flattenTrainingSets(allTrainingSets)
 
 
-# In[]:
+# In[59]:
 
 
 def reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y):
@@ -323,13 +401,13 @@ def reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlat
     return allTrainingSetsFlattened_Input, allTrainingSetsFlattened_Output
 
 
-# In[]:
+# In[60]:
 
 
 allTrainingSetsFlattened_Input, allTrainingSetsFlattened_Output = reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y)
 
 
-# In[]:
+# In[61]:
 
 
 # The LSTM architecture
@@ -347,20 +425,20 @@ regressor.add(Dropout(0.2))
 regressor.add(LSTM(units=50))
 regressor.add(Dropout(0.2))
 # The output layer
-regressor.add(Dense(units=2))
+regressor.add(Dense(units=allTrainingSetsFlattened_Input.shape[2]))
 
 # Compiling the RNN
 regressor.compile(optimizer='rmsprop',loss='mean_squared_error')
 
 
-# In[]:
+# In[62]:
 
 
 # Fitting to the training set
 regressor.fit(allTrainingSetsFlattened_Input,allTrainingSetsFlattened_Output,epochs=2,batch_size=32)
 
 
-# In[]:
+# In[24]:
 
 
 dataset_path_test = dm.require('scenes/test.zarr')
@@ -369,51 +447,51 @@ zarr_dataset_test.open()
 print(zarr_dataset_test)
 
 
-# In[]:
+# In[25]:
 
 
 print(len(zarr_dataset_test.agents))
 
 
-# In[]:
+# In[28]:
 
 
-subsetPercent = 1*10**-3
+subsetPercent = 1*10**-4
 print(subsetPercent)
 agentsTest = getAgents(zarr_dataset_test.agents, subsetPercent)
 
 
-# In[]:
+# In[29]:
 
 
 plotAgents(agents)
 
 
-# In[]:
+# In[30]:
 
 
 agentsTestOverLimit = printAgentsInfo(agentsTest, limit)
 
 
-# In[]:
+# In[31]:
 
 
 allTestingSets = getTrainingSets(agentsTestOverLimit, limit)
 
 
-# In[]:
+# In[32]:
 
 
 allTestingSetsFlattened_X, allTestingSetsFlattened_Y = flattenTrainingSets(allTestingSets)
 
 
-# In[]:
+# In[33]:
 
 
 allTestingSetsFlattened_Input, allTestingSetsFlattened_Output = reshapeFlattenedTrainingSets(allTestingSetsFlattened_X, allTestingSetsFlattened_Y)
 
 
-# In[]:
+# In[37]:
 
 
 max = len(allTestingSetsFlattened_Input)
@@ -421,14 +499,14 @@ print(max)
 chunkSize = 100
 pb = ProgressBar(max)
 pb.start()
-predictedTestAgentCentroid = [[0,0]]
+predictedTestAgentCentroid = np.empty((1,5))
 for i in range(0, max-chunkSize, chunkSize):#len(zarr_dataset.agents)):
     newPredictions = regressor.predict(allTestingSetsFlattened_Input[i:i+chunkSize])
     predictedTestAgentCentroid = np.concatenate((predictedTestAgentCentroid, newPredictions))
     pb.check(i, True)
 
 
-# In[]:
+# In[38]:
 
 
 print(len(predictedTestAgentCentroid))
@@ -436,7 +514,7 @@ predictedTestAgentCentroid = predictedTestAgentCentroid[1:len(predictedTestAgent
 print(len(predictedTestAgentCentroid))
 
 
-# In[]:
+# In[39]:
 
 
 randomSamples = 10
@@ -446,7 +524,13 @@ for i in range(0, len(predictedTestAgentCentroid), round(len(predictedTestAgentC
     print(predictedTestAgentCentroid[i])
 
 
-# In[]:
+# In[ ]:
+
+
+
+
+
+# In[ ]:
 
 
 
