@@ -135,7 +135,7 @@ class ProgressBar:
         print()
 
 #>
-def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
+def getAgentsChunked(dataset, subsetPercent=1, chunks=10, mask_copy=[]):
 
     datasetLength = round(len(dataset) * subsetPercent)
     chunkSize = round(datasetLength / chunks)
@@ -148,11 +148,13 @@ def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
 
         agentsSubset = dataset[i:i+chunkSize]
         for j in range(0,len(agentsSubset)):
-
+            if len(mask_copy) > 0 and (j + i < len(mask_copy)) and not(mask_copy[i+j]):
+                continue
+            
             agent = agentsSubset[j]
             track_id = agent[4]
 
-            if track_id >= len(agents):
+            while track_id >= len(agents):
                 agents.append([])
 
             data = []
@@ -164,7 +166,9 @@ def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
             data.append(yaw)
             data.append(velocity[0])
             data.append(velocity[1])
+            
             agents[int(track_id)-1].append(data)
+            
         pb.check(i, True)
 
     return agents
@@ -179,7 +183,7 @@ agents = []
 print(type(agents))
 
 #>
-subsetPercent = 1*10**-3
+subsetPercent = 1*10**-1
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
 
@@ -424,12 +428,56 @@ zarr_dataset_test.open()
 print(zarr_dataset_test)
 
 #>
+test_mask = np.load('../input/lyft-motion-prediction-autonomous-vehicles/scenes/mask.npz')["arr_0"]
+print(test_mask)
+print(test_mask.shape)
+print(test_mask[0])
+
+#>
+subsetPercent = 1 * 10**-1
+subsetLength = round(len(test_mask) * subsetPercent)
+count = 0
+pb = ProgressBar(subsetLength)
+pb.start()
+chunkSize = 10
+mask_copy = []
+mask_indexes = []
+for i in range(0, subsetLength, chunkSize):
+    chunkedTestMask = test_mask[i: i + chunkSize]
+    for j in range(0, len(chunkedTestMask)):
+        mask = chunkedTestMask[j]
+        mask_copy.append(mask)
+        if mask:
+            mask_indexes.append(i + j)
+            count = count + 1
+    pb.check(i)
+pb.end()
+print(count)
+
+#>
+prev = mask_indexes[0]
+diffs = []
+for i in range(1, len(mask_indexes)):
+    curr = mask_indexes[i]
+    diff = curr - prev
+    diffs.append(diff)
+    prev = curr
+print(diffs[0:10])
+
+#>
+print("max",np.max(diffs))
+print("min",np.min(diffs))
+print("median",np.median(diffs))
+print("mean",np.mean(diffs))
+print("std",np.std(diffs), "\n")
+
+#>
 print(len(zarr_dataset_test.agents))
 
 #>
-subsetPercent = 1*10**-4
+subsetPercent = 1*10**-1
 print(subsetPercent)
-agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000)
+agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000, mask_copy)
 
 #>
 plotAgents(agents)
