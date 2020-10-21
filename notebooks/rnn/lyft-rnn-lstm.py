@@ -357,7 +357,7 @@ def flattenTrainingSets(allTrainingSets, totalNumberOfTrainingSets):
 #>
 allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y = flattenTrainingSets(allTrainingSets, totalNumberOfTrainingSets)
 
-
+#>
 length = len(allTrainingSetsFlattened_X)
 depth = len(allTrainingSetsFlattened_X[0])
 channels = len(allTrainingSetsFlattened_X[0][0])
@@ -427,7 +427,7 @@ print(zarr_dataset_test)
 print(len(zarr_dataset_test.agents))
 
 #>
-subsetPercent = 1*10**-1
+subsetPercent = 1*10**-4
 print(subsetPercent)
 agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000)
 
@@ -493,7 +493,13 @@ print(testCSVOutput.shape)
 
 #>
 import os
-os.remove(csv_path)
+
+#>
+if os.path.exists(csv_path):
+    os.remove(csv_path)
+
+#>
+dummyData = np.empty((10,50,2))
 
 #>
 file = open(csv_path, 'w')
@@ -514,6 +520,20 @@ for confidence in range(0,3):
 row = row + "\n"
 print(row)
 file.write(row)
+
+#>
+for i in range(0, len(dummyData)):
+    idRow = dummyData[i]
+    row = ""
+    row = str(i)
+    for future in idRow:
+        for pos in future:
+            row = row + str(pos) + ","
+    row = row + "\n"
+    print(row)
+    file.write(row)
+
+#>
 file.close()
 
 #>
