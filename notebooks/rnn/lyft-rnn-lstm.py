@@ -183,7 +183,7 @@ agents = []
 print(type(agents))
 
 #>
-subsetPercent = 1*10**-1
+subsetPercent = 1*10**-2
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
 
@@ -304,10 +304,10 @@ def getTrainingSets(agents, limit):
     allTrainingSets = []
     totalNumberOfTrainingSets = 0
     
-    pb = ProgressBar(len(agentsOverLimit))
+    pb = ProgressBar(len(agents))
     pb.start()
-    for i in range(0, len(agentsOverLimit)):
-        agent = agentsOverLimit[i]
+    for i in range(0, len(agents)):
+        agent = agents[i]
         agentTrainingSets = []
         for i in range(limit, len(agent)-1):
             agentTrainingSet = []
@@ -329,8 +329,8 @@ def getTrainingSets(agents, limit):
     print("len(allTrainingSets)", len(allTrainingSets))
     print("len(allTrainingSets[0])",len(allTrainingSets[0]), "\n")
 
-    print("len(agentsOverLimit)",len(agentsOverLimit))
-    print("len(agentsOverLimit[0]) - limit - 1",len(agentsOverLimit[0]) - limit - 1, "\n")
+    print("len(agents)",len(agents))
+    print("len(agents[0]) - limit - 1",len(agents[0]) - limit - 1, "\n")
 
     print("totalNumberOfTrainingSets",totalNumberOfTrainingSets)
     return allTrainingSets, totalNumberOfTrainingSets
@@ -489,7 +489,43 @@ normalizedAgentsTest = normalizeAgents(agentsTest)
 agentsTestOverLimit = printAgentsInfo(normalizedAgentsTest, limit)
 
 #>
-allTestingSets, totalNumberOfTestingSets = getTrainingSets(agentsTestOverLimit, limit)
+def getTestingSets(agents, limit):
+    allTrainingSets = []
+    totalNumberOfTrainingSets = 0
+    
+    pb = ProgressBar(len(agents))
+    pb.start()
+    for i in range(0, len(agents)):
+        agent = agents[i]
+        agentTrainingSets = []
+        for i in range(limit, len(agent)-1):
+            agentTrainingSet = []
+
+            start = i - limit
+            end = i
+            output = i + 1
+
+            agentTrainingSet.append(agent[start:end])
+            agentTrainingSet.append(agent[output])
+            agentTrainingSets.append(agentTrainingSet)
+
+            totalNumberOfTrainingSets = totalNumberOfTrainingSets + 1
+
+        allTrainingSets.append(agentTrainingSets)
+        pb.check(i)
+    pb.end()
+    
+    print("len(allTrainingSets)", len(allTrainingSets))
+    print("len(allTrainingSets[0])",len(allTrainingSets[0]), "\n")
+
+    print("len(agents)",len(agents))
+    print("len(agents[0]) - limit - 1",len(agents[0]) - limit - 1, "\n")
+
+    print("totalNumberOfTrainingSets",totalNumberOfTrainingSets)
+    return allTrainingSets, totalNumberOfTrainingSets
+
+#>
+allTestingSets, totalNumberOfTestingSets = getTestingSets(agentsTestOverLimit, limit)
 
 #>
 allTestingSetsFlattened_X, allTestingSetsFlattened_Y = flattenTrainingSets(allTestingSets, totalNumberOfTestingSets)
@@ -499,31 +535,21 @@ allTestingSetsFlattened_Input = allTestingSetsFlattened_X
 allTestingSetsFlattened_Output = allTestingSetsFlattened_Y
 
 #>
-print(allTestingSetsFlattened_Input.shape)
-
-#>
 max = len(allTestingSetsFlattened_Input)
 print(max)
-chunkSize = 100
+chunkSize = 1000
 pb = ProgressBar(max)
 pb.start()
 predictedTestAgentCentroid = np.empty((1,5))
 for i in range(0, max-chunkSize, chunkSize):#len(zarr_dataset.agents)):
     newPredictions = regressor.predict(allTestingSetsFlattened_Input[i:i+chunkSize])
-    print(newPredictions.shape)
     predictedTestAgentCentroid = np.concatenate((predictedTestAgentCentroid, newPredictions))
     pb.check(i, True)
 
 #>
 print(predictedTestAgentCentroid.shape)
-
-#>
-print(predictedTestAgentCentroid.shape)
 predictedTestAgentCentroid = predictedTestAgentCentroid[1:len(predictedTestAgentCentroid)]
 print(predictedTestAgentCentroid.shape)
-
-#>
-print(len(predictedTestAgentCentroid))
 
 #>
 randomSamples = 10
