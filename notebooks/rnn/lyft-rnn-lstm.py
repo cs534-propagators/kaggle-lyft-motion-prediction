@@ -267,12 +267,10 @@ def normalizeAgents(agents):
     for i in range(0, len(dataForNormalization)):
         pb.end()
         data = dataForNormalization[i]
-        mean = np.mean(data)
-        std = np.std(data)
-        print("max[{}]".format(i),np.max(data))
-        print("min[{}]".format(i),np.min(data))
-        print("mean[{}]".format(i),mean)
-        print("std[{}]".format(i),std, "\n")
+        min_ = np.min(data)
+        max_ = np.max(data)
+        print("max[{}]".format(i),max_)
+        print("min[{}]".format(i),min_,"\n")
         
         for j in range(0, len(agents)):
             pb.check(i * j)
@@ -289,7 +287,7 @@ def normalizeAgents(agents):
                 normalizedData = normalizedAgent[k]
                 
                 feature = data[i]
-                normalizedFeature = (feature - mean) / std
+                normalizedFeature = (feature - min_) / (max_ - min_)
                 if i == 0 and first:
                     print(feature)
                     print(normalizedFeature)
