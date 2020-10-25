@@ -423,7 +423,7 @@ cfg = {
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -990,7 +990,7 @@ cfg = {
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -1024,7 +1024,7 @@ debug = flags.debug
 
 #>
 # set env variable for data
-l5kit_data_folder = "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
+l5kit_data_folder = "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
 os.environ["L5KIT_DATA_FOLDER"] = l5kit_data_folder
 dm = LocalDataManager(None)
 
@@ -1091,17 +1091,18 @@ timestamps, track_ids, coords, confs = run_prediction(predictor, test_loader)
 
 # --- Pre Scoreing ---
 import math
-gtFilePath = "/kaggle/input/samplegroundtruth/RealDataSample.csv"
+gtFilePath = "/home/kohmei358/Desktop/Github/kaggle/input/RealDataSample.csv"
 gen = read_gt_csv(gtFilePath)
 scores = []
 
 startVal = 0
-endVal = 111634
+endVal = 100
 firstLogAt = 6000
 numberOfSamples = 50
-oneInEvery = math.floor(111634/(numberOfSamples-1))
+# oneInEvery = math.floor(100/(numberOfSamples-1))
+oneInEvery = 1
 
-allPredictions = coords.reshape(111634,3,50,2)
+allPredictions = coords.reshape(100,3,50,2)
 
 for i in range(endVal):
     testRow = next(gen)
