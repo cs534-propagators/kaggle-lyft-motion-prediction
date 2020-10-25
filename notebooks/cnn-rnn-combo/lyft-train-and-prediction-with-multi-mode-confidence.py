@@ -31,7 +31,7 @@ See previous kernel [Lyft: Comprehensive guide to start competition](https://www
 
 #>
 # https://github.com/pfnet/pytorch-pfn-extras/releases/tag/v0.3.1
-!pip install pytorch-pfn-extras==0.3.1
+# !pip install pytorch-pfn-extras==0.3.1
 
 #>
 import gc
@@ -423,7 +423,7 @@ cfg = {
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -639,7 +639,7 @@ The history log and model's weight are saved by "extensions" (`LogReport` and `E
 #>
 # Let's see training results directory
 
-!ls results/multi_train
+# !ls results/multi_train
 
 '''
 # Items to try
@@ -711,7 +711,7 @@ See previous kernel [Lyft: Comprehensive guide to start competition](https://www
 '''
 
 #>
-!pip install pytorch-pfn-extras==0.3.1
+# !pip install pytorch-pfn-extras==0.3.1
 
 #>
 import gc
@@ -766,7 +766,7 @@ from tqdm import tqdm
 from collections import Counter
 from l5kit.data import PERCEPTION_LABELS
 from prettytable import PrettyTable
-from l5kit.evaluation import write_pred_csv
+from l5kit.evaluation import write_pred_csv, extract_ground_truth, read_gt_csv, metrics
 
 from matplotlib import animation, rc
 from IPython.display import HTML
@@ -988,9 +988,9 @@ cfg = {
 
 #>
 flags_dict = {
-    "debug": False,
+    "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -1024,7 +1024,7 @@ debug = flags.debug
 
 #>
 # set env variable for data
-l5kit_data_folder = "/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
+l5kit_data_folder = "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
 os.environ["L5KIT_DATA_FOLDER"] = l5kit_data_folder
 dm = LocalDataManager(None)
 
@@ -1074,7 +1074,7 @@ if flags.pred_mode == "multi":
 else:
     raise ValueError(f"[ERROR] Unexpected value flags.pred_mode={flags.pred_mode}")
 
-pt_path = "/kaggle/input/lyft-resnet18-baseline/0918_predictor_full.pt"
+pt_path = "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train/predictor.pt"
 print(f"Loading from {pt_path}")
 predictor.load_state_dict(torch.load(pt_path))
 predictor.to(device)
@@ -1088,6 +1088,43 @@ predictor.to(device)
 timestamps, track_ids, coords, confs = run_prediction(predictor, test_loader)
 
 #>
+
+# --- Pre Scoreing ---
+import math
+gtFilePath = "/kaggle/input/samplegroundtruth/RealDataSample.csv"
+gen = read_gt_csv(gtFilePath)
+scores = []
+
+startVal = 0
+endVal = 111634
+firstLogAt = 6000
+numberOfSamples = 50
+oneInEvery = math.floor(111634/(numberOfSamples-1))
+
+allPredictions = coords.reshape(111634,3,50,2)
+
+for i in range(endVal):
+    testRow = next(gen)
+    if i % oneInEvery == 0:
+        gt = (testRow['coord'])
+        prediction = allPredictions[i]
+        firstRowOfConts = confs[i]
+        avails = np.transpose(testRow['avail'])
+#         print("Index: "+str(i+1))
+#         print(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
+        scores.append(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
+#         if(i+1 >= firstLogAt):
+# #             print("Index Log: "+str(i+1))
+# #             print("Length: "+str(len(scores)))
+# #             print(sum(scores) / len(scores))
+#             firstLogAt = firstLogAt + 100
+
+print("Final Log: "+str(i+1))
+print("Length: "+str(len(scores)))
+print(sum(scores) / len(scores))
+
+# Submit Score
+
 csv_path = "submission.csv"
 write_pred_csv(
     csv_path,
