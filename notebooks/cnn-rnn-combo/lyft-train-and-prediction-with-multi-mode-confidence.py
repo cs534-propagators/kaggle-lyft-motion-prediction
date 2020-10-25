@@ -1047,9 +1047,8 @@ print("test_zarr", type(test_zarr))
 test_mask = np.load(f"{l5kit_data_folder}/scenes/mask.npz")["arr_0"]
 test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer, agents_mask=test_mask)
 test_dataset = test_agent_dataset
-if debug:
-    # Only use 100 dataset for fast check...
-    test_dataset = Subset(test_dataset, np.arange(100))
+                                    #0, dataset size, number to skip to get ~5000
+test_dataset = Subset(test_dataset, np.arange(0, 71122, 14))
 test_loader = DataLoader(
     test_dataset,
     shuffle=test_cfg["shuffle"],
@@ -1096,29 +1095,29 @@ gen = read_gt_csv(gtFilePath)
 scores = []
 
 startVal = 0
-endVal = 100
-firstLogAt = 6000
-numberOfSamples = 50
+endVal = 71122
+# numberOfSamples =
 # oneInEvery = math.floor(100/(numberOfSamples-1))
-oneInEvery = 1
+oneInEvery = 22 #same as the subset function above
 
-allPredictions = coords.reshape(100,3,50,2)
+            #5081 is datsetTotal divided by nunberToSkip - This is how many samples we have
+allPredictions = coords.reshape(5081, 3, 50, 2)
 
+#index I is for ground truth looping
+#index J is for predictions and confs array
+
+j = 0
 for i in range(endVal):
     testRow = next(gen)
     if i % oneInEvery == 0:
         gt = (testRow['coord'])
-        prediction = allPredictions[i]
-        firstRowOfConts = confs[i]
+        prediction = allPredictions[j]
+        firstRowOfConts = confs[j]
         avails = np.transpose(testRow['avail'])
-#         print("Index: "+str(i+1))
+#         print("Index: "+str(j+1))
 #         print(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
         scores.append(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
-#         if(i+1 >= firstLogAt):
-# #             print("Index Log: "+str(i+1))
-# #             print("Length: "+str(len(scores)))
-# #             print(sum(scores) / len(scores))
-#             firstLogAt = firstLogAt + 100
+        j += 1
 
 print("Final Log: "+str(i+1))
 print("Length: "+str(len(scores)))
