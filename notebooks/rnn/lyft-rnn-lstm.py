@@ -135,7 +135,7 @@ class ProgressBar:
         print()
 
 #>
-def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
+def getAgentsChunked(dataset, subsetPercent=1, chunks=10, mask_copy=[]):
 
     datasetLength = round(len(dataset) * subsetPercent)
     chunkSize = round(datasetLength / chunks)
@@ -148,11 +148,13 @@ def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
 
         agentsSubset = dataset[i:i+chunkSize]
         for j in range(0,len(agentsSubset)):
-
+            if len(mask_copy) > 0 and (j + i < len(mask_copy)) and not(mask_copy[i+j]):
+                continue
+            
             agent = agentsSubset[j]
             track_id = agent[4]
 
-            if track_id >= len(agents):
+            while track_id >= len(agents):
                 agents.append([])
 
             data = []
@@ -164,7 +166,9 @@ def getAgentsChunked(dataset, subsetPercent=1, chunks=10):
             data.append(yaw)
             data.append(velocity[0])
             data.append(velocity[1])
+            
             agents[int(track_id)-1].append(data)
+            
         pb.check(i, True)
 
     return agents
@@ -179,7 +183,7 @@ agents = []
 print(type(agents))
 
 #>
-subsetPercent = 1 #1*10**-2
+subsetPercent = 1*10**-2
 print(subsetPercent)
 agents = getAgentsChunked(zarr_dataset.agents, subsetPercent, 100)
 
@@ -206,8 +210,9 @@ def normalizeAgents(agents):
     dataForNormalization = []
     pb = ProgressBar(len(agents))
     pb.start()
-    for agent in agents:
-        pb.check(0, True)
+    for i in range(0, len(agents)):
+        agent = agents[i]
+        pb.check(i)
         for data in agent:
             for i in range(0, len(data)):
                 feature = data[i]
@@ -219,6 +224,7 @@ def normalizeAgents(agents):
     first = True
     normalizedAgents = []
     pb = ProgressBar(len(dataForNormalization) * len(agents))
+    counter = 0
     pb.start()
     for i in range(0, len(dataForNormalization)):
         pb.end()
@@ -229,7 +235,8 @@ def normalizeAgents(agents):
         print("min[{}]".format(i),min_,"\n")
         
         for j in range(0, len(agents)):
-            pb.check(i * j)
+            counter = counter + 1
+            pb.check(counter)
             if j >= len(normalizedAgents):
                 normalizedAgents.append([])
                 
@@ -297,10 +304,10 @@ def getTrainingSets(agents, limit):
     allTrainingSets = []
     totalNumberOfTrainingSets = 0
     
-    pb = ProgressBar(len(agentsOverLimit))
+    pb = ProgressBar(len(agents))
     pb.start()
-    for i in range(0, len(agentsOverLimit)):
-        agent = agentsOverLimit[i]
+    for i in range(0, len(agents)):
+        agent = agents[i]
         agentTrainingSets = []
         for i in range(limit, len(agent)-1):
             agentTrainingSet = []
@@ -317,58 +324,58 @@ def getTrainingSets(agents, limit):
 
         allTrainingSets.append(agentTrainingSets)
         pb.check(i)
-
+    pb.end()
+    
     print("len(allTrainingSets)", len(allTrainingSets))
     print("len(allTrainingSets[0])",len(allTrainingSets[0]), "\n")
 
-    print("len(agentsOverLimit)",len(agentsOverLimit))
-    print("len(agentsOverLimit[0]) - limit - 1",len(agentsOverLimit[0]) - limit - 1, "\n")
+    print("len(agents)",len(agents))
+    print("len(agents[0]) - limit - 1",len(agents[0]) - limit - 1, "\n")
 
     print("totalNumberOfTrainingSets",totalNumberOfTrainingSets)
-    return allTrainingSets
+    return allTrainingSets, totalNumberOfTrainingSets
 
 #>
-allTrainingSets = getTrainingSets(agentsOverLimit, limit)
+allTrainingSets, totalNumberOfTrainingSets = getTrainingSets(agentsOverLimit, limit)
 
 #>
-def flattenTrainingSets(allTrainingSets):
-    allTrainingSetsFlattened_X = []
-    allTrainingSetsFlattened_Y = []
+print(len(allTrainingSets))
+print(len(allTrainingSets[0]))
+print(len(allTrainingSets[0][0]))
+print(len(allTrainingSets[0][0][0]))
+print(len(allTrainingSets[0][0][0][0]))
+
+#>
+def flattenTrainingSets(allTrainingSets, totalNumberOfTrainingSets):
+    allTrainingSetsFlattened_X = np.empty((totalNumberOfTrainingSets, limit, len(allTrainingSets[0][0][0][0])))
+    allTrainingSetsFlattened_Y = np.empty((totalNumberOfTrainingSets, len(allTrainingSets[0][0][0][0])))
+    count = 0
     for allTrainingSet in allTrainingSets:
         for trainingSet in allTrainingSet:
-            allTrainingSetsFlattened_X.append(trainingSet[0])
-            allTrainingSetsFlattened_Y.append(trainingSet[1])
+            allTrainingSetsFlattened_X[count] = np.array(trainingSet[0])
+            allTrainingSetsFlattened_Y[count] = trainingSet[1]
+            count = count + 1
     print("len(allTrainingSetsFlattened_X)", len(allTrainingSetsFlattened_X))
     return allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y
 
 #>
-allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y = flattenTrainingSets(allTrainingSets)
+allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y = flattenTrainingSets(allTrainingSets, totalNumberOfTrainingSets)
 
 #>
-def reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y):
-    length = len(allTrainingSetsFlattened_X)
-    depth = len(allTrainingSetsFlattened_X[0])
-    channels = len(allTrainingSetsFlattened_X[0][0])
+length = len(allTrainingSetsFlattened_X)
+depth = len(allTrainingSetsFlattened_X[0])
+channels = len(allTrainingSetsFlattened_X[0][0])
 
-    print("length", length)
-    print("depth", depth)
-    print("channels",channels)
-    print("length*depth*channels",length*depth*channels)
+print("length", length)
+print("depth", depth)
+print("channels",channels)
+print("length*depth*channels",length*depth*channels)
 
-    allTrainingSetsFlattened_Input = np.reshape(allTrainingSetsFlattened_X, (length,depth,channels))
-    allTrainingSetsFlattened_Output = np.reshape(allTrainingSetsFlattened_Y, (length,1,channels))
-
-    print(allTrainingSetsFlattened_Input.shape[1])
-    print(allTrainingSetsFlattened_Input.shape[2])
-    
-    return allTrainingSetsFlattened_Input, allTrainingSetsFlattened_Output
-
-#>
 allTrainingSetsFlattened_Input = allTrainingSetsFlattened_X
 allTrainingSetsFlattened_Output = allTrainingSetsFlattened_Y
 
-#>
-allTrainingSetsFlattened_Input, allTrainingSetsFlattened_Output = reshapeFlattenedTrainingSets(allTrainingSetsFlattened_X, allTrainingSetsFlattened_Y)
+print(allTrainingSetsFlattened_Input.shape[1])
+print(allTrainingSetsFlattened_Input.shape[2])
 
 #>
 # The LSTM architecture
@@ -421,12 +428,56 @@ zarr_dataset_test.open()
 print(zarr_dataset_test)
 
 #>
+test_mask = np.load('../input/lyft-motion-prediction-autonomous-vehicles/scenes/mask.npz')["arr_0"]
+print(test_mask)
+print(test_mask.shape)
+print(test_mask[0])
+
+#>
+subsetPercent = 1 * 10**-1
+subsetLength = round(len(test_mask) * subsetPercent)
+count = 0
+pb = ProgressBar(subsetLength)
+pb.start()
+chunkSize = 10
+mask_copy = []
+mask_indexes = []
+for i in range(0, subsetLength, chunkSize):
+    chunkedTestMask = test_mask[i: i + chunkSize]
+    for j in range(0, len(chunkedTestMask)):
+        mask = chunkedTestMask[j]
+        mask_copy.append(mask)
+        if mask:
+            mask_indexes.append(i + j)
+            count = count + 1
+    pb.check(i)
+pb.end()
+print(count)
+
+#>
+prev = mask_indexes[0]
+diffs = []
+for i in range(1, len(mask_indexes)):
+    curr = mask_indexes[i]
+    diff = curr - prev
+    diffs.append(diff)
+    prev = curr
+print(diffs[0:10])
+
+#>
+print("max",np.max(diffs))
+print("min",np.min(diffs))
+print("median",np.median(diffs))
+print("mean",np.mean(diffs))
+print("std",np.std(diffs), "\n")
+
+#>
 print(len(zarr_dataset_test.agents))
 
 #>
-subsetPercent = 1*10**-3
+subsetPercent = 1*10**-1
 print(subsetPercent)
-agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000)
+agentsTest = getAgentsChunked(zarr_dataset_test.agents, subsetPercent, 1000, mask_copy)
 
 #>
 plotAgents(agents)
@@ -438,13 +489,50 @@ normalizedAgentsTest = normalizeAgents(agentsTest)
 agentsTestOverLimit = printAgentsInfo(normalizedAgentsTest, limit)
 
 #>
-allTestingSets = getTrainingSets(agentsTestOverLimit, limit)
+def getTestingSets(agents, limit):
+    allTrainingSets = []
+    totalNumberOfTrainingSets = 0
+    
+    pb = ProgressBar(len(agents))
+    pb.start()
+    for i in range(0, len(agents)):
+        agent = agents[i]
+        agentTrainingSets = []
+        for i in range(limit, len(agent)-1):
+            agentTrainingSet = []
+
+            start = i - limit
+            end = i
+            output = i + 1
+
+            agentTrainingSet.append(agent[start:end])
+            agentTrainingSet.append(agent[output])
+            agentTrainingSets.append(agentTrainingSet)
+
+            totalNumberOfTrainingSets = totalNumberOfTrainingSets + 1
+
+        allTrainingSets.append(agentTrainingSets)
+        pb.check(i)
+    pb.end()
+    
+    print("len(allTrainingSets)", len(allTrainingSets))
+    print("len(allTrainingSets[0])",len(allTrainingSets[0]), "\n")
+
+    print("len(agents)",len(agents))
+    print("len(agents[0]) - limit - 1",len(agents[0]) - limit - 1, "\n")
+
+    print("totalNumberOfTrainingSets",totalNumberOfTrainingSets)
+    return allTrainingSets, totalNumberOfTrainingSets
 
 #>
-allTestingSetsFlattened_X, allTestingSetsFlattened_Y = flattenTrainingSets(allTestingSets)
+allTestingSets, totalNumberOfTestingSets = getTestingSets(agentsTestOverLimit, limit)
 
 #>
-allTestingSetsFlattened_Input, allTestingSetsFlattened_Output = reshapeFlattenedTrainingSets(allTestingSetsFlattened_X, allTestingSetsFlattened_Y)
+allTestingSetsFlattened_X, allTestingSetsFlattened_Y = flattenTrainingSets(allTestingSets, totalNumberOfTestingSets)
+
+#>
+allTestingSetsFlattened_Input = allTestingSetsFlattened_X
+allTestingSetsFlattened_Output = allTestingSetsFlattened_Y
 
 #>
 max = len(allTestingSetsFlattened_Input)
@@ -458,18 +546,69 @@ for i in range(0, max-chunkSize, chunkSize):#len(zarr_dataset.agents)):
     predictedTestAgentCentroid = np.concatenate((predictedTestAgentCentroid, newPredictions))
     pb.check(i, True)
 
-
 #>
-print(len(predictedTestAgentCentroid))
+print(predictedTestAgentCentroid.shape)
 predictedTestAgentCentroid = predictedTestAgentCentroid[1:len(predictedTestAgentCentroid)]
-print(len(predictedTestAgentCentroid))
+print(predictedTestAgentCentroid.shape)
 
 #>
 randomSamples = 10
 for i in range(0, len(predictedTestAgentCentroid), round(len(predictedTestAgentCentroid) / randomSamples)):
     testSet = allTestingSetsFlattened_Input[i]
-    print(testSet[0][0])
-    print(predictedTestAgentCentroid[i][0],"\n")
+    lastTestSet = testSet[len(testSet[0]) - 1][0]
+    firstPrediction = predictedTestAgentCentroid[i][0]
+    print(lastTestSet)
+    print(firstPrediction,"\n")
+
+#>
+csv_path = "submission.csv"
+testCSVOutput = np.empty((5,50,2))
+print(testCSVOutput.shape)
+
+#>
+import os
+
+#>
+if os.path.exists(csv_path):
+    os.remove(csv_path)
+
+#>
+dummyData = np.empty((10,50,2))
+
+#>
+file = open(csv_path, 'w')
+
+def printCoord(row, axis, confidence, timestep):
+    return row + "coord_" + axis + str(confidence) + str(timestep) + ","
+    
+# timestamp track_id conf_0 conf_1 conf_2	coord_x00 coord_y249
+row = ""
+row = row + "timestamp" + ","
+row = row + "track_id" + ","
+for i in range(0,3):
+    row = row + "conf_" + str(i) + ","
+for confidence in range(0,3):
+    for timestep in range(0,50):
+        row = printCoord(row, "x", confidence, timestep)
+        row = printCoord(row, "y", confidence, timestep)
+row = row + "\n"
+print(row)
+file.write(row)
+
+#>
+for i in range(0, len(dummyData)):
+    idRow = dummyData[i]
+    row = ""
+    row = str(i)
+    for future in idRow:
+        for pos in future:
+            row = row + str(pos) + ","
+    row = row + "\n"
+    print(row)
+    file.write(row)
+
+#>
+file.close()
 
 #>
 
