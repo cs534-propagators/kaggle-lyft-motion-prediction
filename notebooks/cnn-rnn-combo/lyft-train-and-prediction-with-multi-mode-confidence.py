@@ -481,7 +481,7 @@ train_agent_dataset = AgentDataset(cfg, train_zarr, rasterizer)
 train_dataset = TransformDataset(train_agent_dataset, transform)
 if debug:
     # Only use 1000 dataset for fast check...
-    train_dataset = Subset(train_dataset, np.arange(1000))
+    train_dataset = Subset(train_dataset, np.arange(100))
 train_loader = DataLoader(train_dataset,
                           shuffle=train_cfg["shuffle"],
                           batch_size=train_cfg["batch_size"],
@@ -970,8 +970,8 @@ cfg = {
         'num_workers': 4
     },
     
-    'test_data_loader': {
-        'key': 'scenes/test.zarr',
+    'sample_data_loader': {
+        'key': 'scenes/sample.zarr',
         'batch_size': 8,
         'shuffle': False,
         'num_workers': 4
@@ -1030,12 +1030,12 @@ dm = LocalDataManager(None)
 
 print("Load dataset...")
 default_test_cfg = {
-    'key': 'scenes/test.zarr',
+    'key': 'scenes/sample.zarr',
     'batch_size': 32,
     'shuffle': False,
     'num_workers': 4
 }
-test_cfg = cfg.get("test_data_loader", default_test_cfg)
+test_cfg = cfg.get("sample_data_loader", default_test_cfg)
 
 # Rasterizer
 rasterizer = build_rasterizer(cfg, dm)
@@ -1044,11 +1044,11 @@ test_path = test_cfg["key"]
 print(f"Loading from {test_path}")
 test_zarr = ChunkedDataset(dm.require(test_path)).open()
 print("test_zarr", type(test_zarr))
-test_mask = np.load(f"{l5kit_data_folder}/scenes/mask.npz")["arr_0"]
-test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer, agents_mask=test_mask)
+# test_mask = np.load(f"{l5kit_data_folder}/scenes/mask.npz")["arr_0"]
+test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer)
 test_dataset = test_agent_dataset
                                     #0, dataset size, number to skip to get ~5000
-test_dataset = Subset(test_dataset, np.arange(0, 71122, 14))
+test_dataset = Subset(test_dataset, np.arange(0, 111634, 22))
 test_loader = DataLoader(
     test_dataset,
     shuffle=test_cfg["shuffle"],
@@ -1095,13 +1095,14 @@ gen = read_gt_csv(gtFilePath)
 scores = []
 
 startVal = 0
-endVal = 71122
+endVal = 111634 #CHNAGE THIS IF YOU CHANGE THE DATAASET
 # numberOfSamples =
 # oneInEvery = math.floor(100/(numberOfSamples-1))
 oneInEvery = 22 #same as the subset function above
 
+#CHANGE THIS FIRST NUMBER IF YOU CHANGE THE PREDICTION SIZE:
             #5081 is datsetTotal divided by nunberToSkip - This is how many samples we have
-allPredictions = coords.reshape(5081, 3, 50, 2)
+allPredictions = coords.reshape(5075, 3, 50, 2)
 
 #index I is for ground truth looping
 #index J is for predictions and confs array
