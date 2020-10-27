@@ -1074,7 +1074,7 @@ if flags.pred_mode == "multi":
 else:
     raise ValueError(f"[ERROR] Unexpected value flags.pred_mode={flags.pred_mode}")
 
-pt_path = "/kaggle/input/lyft-resnet18-baseline/0918_predictor_full.pt"
+pt_path = "/kaggle/working/results/multi_train/predictor.pt"
 print(f"Loading from {pt_path}")
 predictor.load_state_dict(torch.load(pt_path))
 predictor.to(device)
