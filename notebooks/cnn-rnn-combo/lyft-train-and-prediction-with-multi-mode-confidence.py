@@ -126,7 +126,6 @@ class TransformDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-
 '''
 ## Function
 
@@ -290,8 +289,6 @@ class LyftMultiModel(nn.Module):
         confidences = torch.softmax(confidences, dim=1)
         return pred, confidences
 
-    
-
 #>
 class LyftMultiRegressor(nn.Module):
     """Single mode prediction"""
@@ -310,7 +307,6 @@ class LyftMultiRegressor(nn.Module):
         }
         ppe.reporting.report(metrics, self)
         return loss, metrics
-
 
 '''
 ## Training with Ignite
@@ -365,8 +361,6 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-    
-
 '''
 ## Configs
 '''
@@ -418,7 +412,6 @@ cfg = {
     }
 }
 
-
 #>
 flags_dict = {
     "debug": True,
@@ -454,8 +447,6 @@ print(f"flags: {flags_dict}")
 save_yaml(out_dir / 'flags.yaml', flags_dict)
 save_yaml(out_dir / 'cfg.yaml', cfg)
 debug = flags.debug
-
-
 
 #>
 # set env variable for data
@@ -681,6 +672,7 @@ To understand the competition in more detail, please refer my other kernels too.
 '''
 <h3 style="color:red">If this kernel helps you, please upvote to keep me motivated :)<br>Thanks!</h3>
 '''
+
 '''
 # Lyft: Prediction with multi-mode confidence
 
@@ -795,82 +787,6 @@ pytorch model definition. Here model outputs both **multi-mode trajectory predic
 '''
 
 #>
-# --- Model utils ---
-import torch
-from torchvision.models import resnet18
-from torch import nn
-from typing import Dict
-
-
-class LyftMultiModel(nn.Module):
-
-    def __init__(self, cfg: Dict, num_modes=3):
-        super().__init__()
-
-        # TODO: support other than resnet18?
-        backbone = resnet18(pretrained=True, progress=True)
-        self.backbone = backbone
-
-        num_history_channels = (cfg["model_params"]["history_num_frames"] + 1) * 2
-        num_in_channels = 3 + num_history_channels
-
-        self.backbone.conv1 = nn.Conv2d(
-            num_in_channels,
-            self.backbone.conv1.out_channels,
-            kernel_size=self.backbone.conv1.kernel_size,
-            stride=self.backbone.conv1.stride,
-            padding=self.backbone.conv1.padding,
-            bias=False,
-        )
-
-        # This is 512 for resnet18 and resnet34;
-        # And it is 2048 for the other resnets
-        backbone_out_features = 512
-
-        # X, Y coords for the future positions (output shape: Bx50x2)
-        self.future_len = cfg["model_params"]["future_num_frames"]
-        num_targets = 2 * self.future_len
-
-        # You can add more layers here.
-        self.head = nn.Sequential(
-            # nn.Dropout(0.2),
-            nn.Linear(in_features=backbone_out_features, out_features=4096),
-        )
-
-        self.num_preds = num_targets * num_modes
-        self.num_modes = num_modes
-
-        self.logit = nn.Linear(4096, out_features=self.num_preds + num_modes)
-
-    def forward(self, x):
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        x = self.backbone.layer4(x)
-
-        x = self.backbone.avgpool(x)
-        x = torch.flatten(x, 1)
-
-        x = self.head(x)
-        x = self.logit(x)
-
-        # pred (bs)x(modes)x(time)x(2D coords)
-        # confidences (bs)x(modes)
-        bs, _ = x.shape
-        pred, confidences = torch.split(x, self.num_preds, dim=1)
-        pred = pred.view(bs, self.num_modes, self.future_len, 2)
-        assert confidences.shape == (bs, self.num_modes)
-        confidences = torch.softmax(confidences, dim=1)
-        return pred, confidences
-
-    
-
-#>
 # --- Utils ---
 import yaml
 
@@ -895,8 +811,6 @@ class DotDict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
-
-    
 
 #>
 # Referred https://www.kaggle.com/pestipeti/pytorch-baseline-inference
@@ -926,65 +840,9 @@ def run_prediction(predictor, data_loader):
     confs = np.concatenate(confidences_list)
     return timestamps, track_ids, coords, confs
 
-
 '''
 ## Configs
 '''
-
-#>
-# --- Lyft configs ---
-cfg = {
-    'format_version': 4,
-    'model_params': {
-        'model_architecture': 'resnet50',
-        'history_num_frames': 10,
-        'history_step_size': 1,
-        'history_delta_time': 0.1,
-        'future_num_frames': 50,
-        'future_step_size': 1,
-        'future_delta_time': 0.1
-    },
-
-    'raster_params': {
-        'raster_size': [224, 224],
-        'pixel_size': [0.5, 0.5],
-        'ego_center': [0.25, 0.5],
-        'map_type': 'py_semantic',
-        'satellite_map_key': 'aerial_map/aerial_map.png',
-        'semantic_map_key': 'semantic_map/semantic_map.pb',
-        'dataset_meta_key': 'meta.json',
-        'filter_agents_threshold': 0.5
-    },
-
-    'train_data_loader': {
-        'key': 'scenes/train.zarr',
-        'batch_size': 12,
-        'shuffle': True,
-        'num_workers': 4
-    },
-
-    'valid_data_loader': {
-        'key': 'scenes/validate.zarr',
-        'batch_size': 32,
-        'shuffle': False,
-        'num_workers': 4
-    },
-    
-    'test_data_loader': {
-        'key': 'scenes/test.zarr',
-        'batch_size': 8,
-        'shuffle': False,
-        'num_workers': 4
-    },
-
-    'train_params': {
-        'max_num_steps': 10000,
-        'checkpoint_every_n_steps': 5000,
-
-        # 'eval_every_n_steps': -1
-    }
-}
-
 
 #>
 flags_dict = {
