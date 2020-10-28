@@ -134,6 +134,9 @@ It works with **pytorch tensor, so it is differentiable** and can be used for tr
 '''
 
 #>
+import tensorflow as tf
+
+#>
 # --- Function utils ---
 # Original code from https://github.com/lyft/l5kit/blob/20ab033c01610d711c3d36e1963ecec86e8b85b6/l5kit/l5kit/evaluation/metrics.py
 import numpy as np
@@ -261,7 +264,17 @@ class LyftMultiModel(nn.Module):
         self.num_preds = num_targets * num_modes
         self.num_modes = num_modes
 
-        self.logit = nn.Linear(4096, out_features=self.num_preds + num_modes)
+        finalFeaturesNum = self.num_preds + num_modes
+        self.logit = nn.Linear(4096, out_features=finalFeaturesNum)
+        print("self.logit\n",self.logit)
+        
+        hidden_dim = 10
+        n_layers = 1
+        self.lstm1 = nn.LSTM(finalFeaturesNum, hidden_dim, n_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, finalFeaturesNum)
+        print("self.lstm1\n",self.lstm1)
+        
+        self.firstForward = True
 
     def forward(self, x):
         x = self.backbone.conv1(x)
@@ -274,12 +287,84 @@ class LyftMultiModel(nn.Module):
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
 
+        # shape1 torch.Size([12, 512, 1, 1])
         x = self.backbone.avgpool(x)
+        if self.firstForward:
+            print("shape1", x.shape)
+        
+        # shape2 torch.Size([12, 512])
         x = torch.flatten(x, 1)
 
+        if self.firstForward:
+            print("shape2", x.shape)
+        
+        # shape3 torch.Size([12, 4096])
         x = self.head(x)
+        if self.firstForward:
+            print("shape3", x.shape,"\n")
+        
+        # shape4 torch.Size([12, 303])
+        # type(x) <class 'torch.Tensor'>
+        # type(x[0]) <class 'torch.Tensor'>
+        # type(x[1]) <class 'torch.Tensor'>      
+        # x[0].shape torch.Size([303])
+        # x[1].shape torch.Size([303])
         x = self.logit(x)
 
+        if self.firstForward:
+            print("shape4", x.shape)
+            print("type(x)",type(x))
+            print("type(x[0])",type(x[0]))
+            print("type(x[1])",type(x[1]))
+            print("x[0].shape",x[0].shape)
+            print("x[1].shape",x[1].shape,"\n")
+    
+        bs, _ = x.shape
+        x = x.view(bs, 1, -1)
+
+        # shape5 torch.Size([12, 1, 303])
+        # type(x) <class 'torch.Tensor'>
+        # type(x[0]) <class 'torch.Tensor'>
+        # type(x[1]) <class 'torch.Tensor'>
+        # x[0].shape torch.Size([1, 303])
+        # x[1].shape torch.Size([1, 303])
+        if self.firstForward:
+            print("shape5", x.shape)
+            print("type(x)",type(x))
+            print("type(x[0])",type(x[0]))
+            print("type(x[1])",type(x[1]))
+            print("x[0].shape",x[0].shape)
+            print("x[1].shape",x[1].shape,"\n")
+            
+        # type(x) <class 'tuple'>
+        # type(x[0]) <class 'torch.Tensor'>
+        # type(x[1]) <class 'tuple'>
+        # x[0].shape torch.Size([12, 1, 10])
+        # len(x[1]) 2
+
+        # type(x) <class 'torch.Tensor'>
+        # shape6 torch.Size([12, 1, 10])
+        x,(hn, cn) = self.lstm1(x)
+        if self.firstForward:
+            print("type(x)",type(x))
+            print("shape6", x.shape)
+            #print("type(x[0])",type(x[0]))
+            #print("type(x[1])",type(x[1]))
+            #print("x[0].shape",x[0].shape)
+            #print("len(x[1])",len(x[1]))
+            #print("type(x[1][0])",type(x[1][0]))
+            #print("type(x[1][1])",type(x[1][1]),"\n")
+
+        # type(x) <class 'torch.Tensor'>
+        # shape7 torch.Size([12, 303])
+        x = self.fc(x[:, -1, :]) 
+        #x = torch.stack(x)
+        #x = np.array(x).astype(np.float32)
+        #x = tf.convert_to_tensor(x)
+        if self.firstForward:
+            print("type(x)",type(x))
+            print("shape7", x.shape)
+        
         # pred (bs)x(modes)x(time)x(2D coords)
         # confidences (bs)x(modes)
         bs, _ = x.shape
@@ -287,6 +372,7 @@ class LyftMultiModel(nn.Module):
         pred = pred.view(bs, self.num_modes, self.future_len, 2)
         assert confidences.shape == (bs, self.num_modes)
         confidences = torch.softmax(confidences, dim=1)
+        self.firstForward = False
         return pred, confidences
 
 #>
@@ -857,7 +943,7 @@ if flags.pred_mode == "multi":
 else:
     raise ValueError(f"[ERROR] Unexpected value flags.pred_mode={flags.pred_mode}")
 
-pt_path = "/kaggle/input/lyft-resnet18-baseline/0918_predictor_full.pt"
+pt_path = "/kaggle/working/results/multi_train/predictor.pt"
 print(f"Loading from {pt_path}")
 predictor.load_state_dict(torch.load(pt_path))
 predictor.to(device)
