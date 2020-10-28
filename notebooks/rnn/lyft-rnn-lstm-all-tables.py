@@ -3,6 +3,7 @@ import gc
 import os
 
 import numpy as np
+import pandas as pd
 
 #>
 import zarr
@@ -77,6 +78,12 @@ print(zarr_dataset.agents.shape)
 n = zarr_dataset.agents.shape
 
 #>
+def find_nearest(points, coord):
+    x, y = coord
+    dist = lambda key: (x - points[key][0]) ** 2 + (y - points[key][1]) ** 2
+    return min(points, key=dist)
+
+#>
 subsetPercent = 5*10**-2
 print("subsetPercent", subsetPercent)
 scenesLen = round(len(zarr_dataset.scenes) * subsetPercent)
@@ -92,7 +99,8 @@ totalDataCount = 0
 totalAgentsCount = 0
 # TODO: could possibly be faster if we get a bigger subset than currently needed and cache it for when we actually do need it
 
-trainingAgentsDict = {}
+# complex variables dict (since different creation - need different dictionary. Need to have list of agents for each frame)
+var_dict = {}
 
 scenesSubsetDataset = zarr_dataset.scenes[0:scenesLen]
 for sceneIndex in range(0, scenesLen):
@@ -105,6 +113,9 @@ for sceneIndex in range(0, scenesLen):
     frameEnd = framesInterval[1]
     
     framesSubsetDataset = zarr_dataset.frames[frameStart:frameEnd]
+    
+    var_dict[sceneIndex] = {}
+    
     for frameIndex in range(0, len(framesSubsetDataset)):
         frame = framesSubsetDataset[frameIndex]
         
@@ -114,6 +125,11 @@ for sceneIndex in range(0, scenesLen):
         agentEnd = agentsInterval[1]
         
         agentsSubsetDataset = zarr_dataset.agents[agentStart:agentEnd]
+        
+        centroid_dict = {}
+        
+        var_dict[sceneIndex][frameIndex] = {}
+        
         for agentIndex in range(0, len(agentsSubsetDataset)):
             agent = agentsSubsetDataset[agentIndex]
             
@@ -121,36 +137,105 @@ for sceneIndex in range(0, scenesLen):
             yaw = agent[2]
             velocity = agent[3]
             track_id = agent[4]
-
-            data = []
-            data.append(centroid[0])
-            data.append(centroid[1])
-            data.append(yaw)
-            data.append(velocity[0])
-            data.append(velocity[1])
             
-            if track_id not in trainingAgentsDict:
-                trainingAgentsDict[track_id] = {}
+            var_dict[sceneIndex][frameIndex][track_id] = {}
+            var_dict[sceneIndex][frameIndex][track_id]['centroid_x'] = centroid[0]
+            var_dict[sceneIndex][frameIndex][track_id]['centroid_y'] = centroid[1]
+            var_dict[sceneIndex][frameIndex][track_id]['yaw'] = yaw
+            var_dict[sceneIndex][frameIndex][track_id]['velocity_x'] = velocity[0]
+            var_dict[sceneIndex][frameIndex][track_id]['velocity_y'] = velocity[1]
             
-            trainingAgentDict = trainingAgentsDict[track_id]
-            
-            if sceneIndex not in trainingAgentDict:
-                trainingAgentDict[sceneIndex] = []
-                
-            trainingAgentScene = trainingAgentDict[sceneIndex]
-            
-            trainingAgentScene.append(data)
             totalDataCount += 1
+            
+            centroid_dict[track_id] = centroid
+            
+        for agent_id in centroid_dict.keys():
+            
+            # get list of agent indices
+            keys = list(centroid_dict.keys())
+
+            # remove the one being examined
+            keys.remove(agent_id)
+
+            # create new dictionary of only neighbor points
+            d1 = {k: centroid_dict[k] for k in keys}
+
+            # Record distance from nearest. Unique characteristics: [scene_starttime, frame_timestamp, agent_trackid]
+            nearest_point_index = find_nearest(d1, centroid_dict[agent_id])
+            dist_from_nearest_pt = (centroid_dict[agent_id][0] - centroid_dict[nearest_point_index][0]) ** 2 + (centroid_dict[agent_id][1] - centroid_dict[nearest_point_index][1]) ** 2
+
+            # look for centroid in front 
+            # Determine which direction it is moving. If previous scene centroid x > current scene centroid x (left --> right) 
+            ### Possible next step
+
+            d2 = {}
+            for (other_agent, centroid) in centroid_dict.items():
+                if centroid_dict[other_agent][0] > centroid_dict[agent_id][0]:
+                    d2[other_agent] = centroid_dict[other_agent] 
+
+            # If there exists datapoints in front
+            if bool(d2):
+                # Record distance from nearest. Unique characteristics: [scene_starttime, frame_timestamp, agent_trackid]
+                nearest_point_index_front = find_nearest(d2, centroid_dict[agent_id])
+                dist_from_nearest_pt_front = (centroid_dict[agent_id][0] - centroid_dict[nearest_point_index_front][0]) ** 2 + (centroid_dict[agent_id][1] - centroid_dict[nearest_point_index_front][1]) ** 2
+
+            # look for centroid behind 
+            d3 = {}
+            for (other_agent, centroid) in centroid_dict.items():
+                if centroid_dict[other_agent][0] < centroid_dict[agent_id][0]:
+                    d3[other_agent] = centroid_dict[other_agent]
+                    
+            # If there exists datapoints in front
+            if bool(d3):
+                # Record distance from nearest. Unique characteristics: [scene_starttime, frame_timestamp, agent_trackid]
+                nearest_point_index_behind = find_nearest(d3, centroid_dict[agent_id])
+                dist_from_nearest_pt_behind = (centroid_dict[agent_id][0] - centroid_dict[nearest_point_index_behind][0]) ** 2 + (centroid_dict[agent_id][1] - centroid_dict[nearest_point_index_behind][1]) ** 2
+                
+            d2 = var_dict[sceneIndex][frameIndex][agent_id]
+            d2['dist_from_nearest_pt'] = dist_from_nearest_pt
+            d2['dist_from_nearest_pt_front'] = dist_from_nearest_pt_front
+            d2['dist_from_nearest_pt_behind'] = dist_from_nearest_pt_behind
+
+            var_dict[sceneIndex][frameIndex][agent_id] = d2
+            
         totalAgentsCount += 1
 
 #>
-print("totalDataCount",totalDataCount)
-print("totalAgentsCount",totalAgentsCount)
+train_df = pd.DataFrame()
+for scene_id in var_dict:
+    for frame_id in var_dict[scene_id]:
+        extra_vars_df = pd.DataFrame.from_dict(var_dict[scene_id][frame_id]).T.reset_index().rename(columns = {'index' : 'track_id'})
+        extra_vars_df['scene_id'] = scene_id
+        extra_vars_df['frame_id'] = frame_id
+        train_df = train_df.append(extra_vars_df)
+
+#>
+trainingAgentsDict = {}
+for track_id in list(train_df['track_id'].unique()):
+    
+    trainingAgentsDict[track_id] = {}
+    
+    df = train_df[train_df['track_id'] == track_id]
+    
+    for scene_id in list(df['scene_id'].unique()):
+        
+        frame_df = df[df['scene_id'] == scene_id]
+        
+        frame_df.drop(columns = ['track_id', 'scene_id', 'frame_id'], inplace = True)
+        
+        frame_list = frame_df.values.tolist()
+        
+        trainingAgentsDict[track_id][scene_id] = frame_list
+    
 
 #>
 print(len(trainingAgentsDict))
 print(len(trainingAgentsDict[1]))
 print(len(trainingAgentsDict[1][0]))
+
+#>
+print("totalDataCount",totalDataCount)
+print("totalAgentsCount",totalAgentsCount)
 
 #>
 import matplotlib.pyplot as plt
