@@ -45,6 +45,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -78,6 +79,7 @@ import l5kit
 from l5kit.data import ChunkedDataset, LocalDataManager
 from l5kit.dataset import EgoDataset, AgentDataset
 
+from l5kit.evaluation import write_pred_csv, extract_ground_truth, read_gt_csv, metrics
 from l5kit.rasterization import build_rasterizer
 from l5kit.configs import load_config_data
 from l5kit.visualization import draw_trajectory, TARGET_POINTS_COLOR
@@ -412,16 +414,22 @@ cfg = {
     }
 }
 
+
 #>
+#Path Generation
+base_path = Path(__file__).parent.parent.parent
+l5kitPath = (base_path / "../kaggle/input/lyft-motion-prediction-autonomous-vehicles").resolve()
+outputPath = (base_path / "../kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train").resolve()
+
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": str(l5kitPath),
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
     "device": "cuda:0",
-    "out_dir": "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train",
+    "out_dir": str(outputPath),
     "epoch": 2,
     "snapshot_freq": 50,
 }
@@ -765,10 +773,14 @@ def run_prediction(predictor, data_loader):
 '''
 
 #>
+
+#Path Generation
+l5kitPath = (base_path / "../kaggle/input/lyft-motion-prediction-autonomous-vehicles").resolve()
+
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": str(l5kitPath),
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -802,7 +814,7 @@ debug = flags.debug
 
 #>
 # set env variable for data
-l5kit_data_folder = "/home/kohmei358/Desktop/Github/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
+l5kit_data_folder = str(l5kitPath)
 os.environ["L5KIT_DATA_FOLDER"] = l5kit_data_folder
 dm = LocalDataManager(None)
 
@@ -852,7 +864,8 @@ if flags.pred_mode == "multi":
 else:
     raise ValueError(f"[ERROR] Unexpected value flags.pred_mode={flags.pred_mode}")
 
-pt_path = "/home/kohmei358/Desktop/Github/kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train/predictor.pt"
+predictorFile = (base_path / "../kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train/predictor.pt").resolve()
+pt_path = str(predictorFile)
 print(f"Loading from {pt_path}")
 predictor.load_state_dict(torch.load(pt_path))
 predictor.to(device)
@@ -869,7 +882,8 @@ timestamps, track_ids, coords, confs = run_prediction(predictor, test_loader)
 
 # --- Pre Scoreing ---
 import math
-gtFilePath = "/home/kohmei358/Desktop/Github/kaggle/input/RealDataSample.csv"
+groundTruthCSVPath = (base_path / "../kaggle/input/RealDataSample.csv").resolve()
+gtFilePath = str(groundTruthCSVPath)
 gen = read_gt_csv(gtFilePath)
 scores = []
 

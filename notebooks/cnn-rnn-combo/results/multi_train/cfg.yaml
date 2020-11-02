@@ -10,7 +10,6 @@ raster_params:
   raster_size: [224, 224]
   satellite_map_key: aerial_map/aerial_map.png
   semantic_map_key: semantic_map/semantic_map.pb
-sample_data_loader: {batch_size: 8, key: scenes/sample.zarr, num_workers: 4, shuffle: false}
 train_data_loader: {batch_size: 12, key: scenes/train.zarr, num_workers: 4, shuffle: true}
 train_params: {checkpoint_every_n_steps: 5000, max_num_steps: 10000}
 valid_data_loader: {batch_size: 32, key: scenes/validate.zarr, num_workers: 4, shuffle: false}
