@@ -31,7 +31,7 @@ See previous kernel [Lyft: Comprehensive guide to start competition](https://www
 
 #>
 # https://github.com/pfnet/pytorch-pfn-extras/releases/tag/v0.3.1
-!pip install pytorch-pfn-extras==0.3.1
+# !pip install pytorch-pfn-extras==0.3.1
 
 #>
 import gc
@@ -45,6 +45,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -78,6 +79,7 @@ import l5kit
 from l5kit.data import ChunkedDataset, LocalDataManager
 from l5kit.dataset import EgoDataset, AgentDataset
 
+from l5kit.evaluation import write_pred_csv, extract_ground_truth, read_gt_csv, metrics
 from l5kit.rasterization import build_rasterizer
 from l5kit.configs import load_config_data
 from l5kit.visualization import draw_trajectory, TARGET_POINTS_COLOR
@@ -125,7 +127,6 @@ class TransformDataset(Dataset):
 
     def __len__(self):
         return len(self.dataset)
-
 
 '''
 ## Function
@@ -290,8 +291,6 @@ class LyftMultiModel(nn.Module):
         confidences = torch.softmax(confidences, dim=1)
         return pred, confidences
 
-    
-
 #>
 class LyftMultiRegressor(nn.Module):
     """Single mode prediction"""
@@ -310,7 +309,6 @@ class LyftMultiRegressor(nn.Module):
         }
         ppe.reporting.report(metrics, self)
         return loss, metrics
-
 
 '''
 ## Training with Ignite
@@ -365,8 +363,6 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-    
-
 '''
 ## Configs
 '''
@@ -420,15 +416,20 @@ cfg = {
 
 
 #>
+#Path Generation
+base_path = Path(__file__).parent.parent.parent
+l5kitPath = (base_path / "../kaggle/input/lyft-motion-prediction-autonomous-vehicles").resolve()
+outputPath = (base_path / "../kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train").resolve()
+
 flags_dict = {
     "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": str(l5kitPath),
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
     "device": "cuda:0",
-    "out_dir": "results/multi_train",
+    "out_dir": str(outputPath),
     "epoch": 2,
     "snapshot_freq": 50,
 }
@@ -455,8 +456,6 @@ save_yaml(out_dir / 'flags.yaml', flags_dict)
 save_yaml(out_dir / 'cfg.yaml', cfg)
 debug = flags.debug
 
-
-
 #>
 # set env variable for data
 os.environ["L5KIT_DATA_FOLDER"] = flags.l5kit_data_folder
@@ -474,7 +473,7 @@ def transform(batch):
     return batch["image"], batch["target_positions"], batch["target_availabilities"]
 
 
-train_path = "scenes/sample.zarr" if debug else train_cfg["key"]
+train_path = train_cfg["key"]
 train_zarr = ChunkedDataset(dm.require(train_path)).open()
 print("train_zarr", type(train_zarr))
 train_agent_dataset = AgentDataset(cfg, train_zarr, rasterizer)
@@ -488,17 +487,12 @@ train_loader = DataLoader(train_dataset,
                           num_workers=train_cfg["num_workers"])
 print(train_agent_dataset)
 
-valid_path = "scenes/sample.zarr" if debug else valid_cfg["key"]
+valid_path = valid_cfg["key"]
 valid_zarr = ChunkedDataset(dm.require(valid_path)).open()
 print("valid_zarr", type(train_zarr))
 valid_agent_dataset = AgentDataset(cfg, valid_zarr, rasterizer)
 valid_dataset = TransformDataset(valid_agent_dataset, transform)
-if debug:
-    # Only use 100 dataset for fast check...
-    valid_dataset = Subset(valid_dataset, np.arange(100))
-else:
-    # Only use 1000 dataset for fast check...
-    valid_dataset = Subset(valid_dataset, np.arange(1000))
+valid_dataset = Subset(valid_dataset, np.arange(100))
 valid_loader = DataLoader(
     valid_dataset,
     shuffle=valid_cfg["shuffle"],
@@ -639,7 +633,7 @@ The history log and model's weight are saved by "extensions" (`LogReport` and `E
 #>
 # Let's see training results directory
 
-!ls results/multi_train
+# !ls results/multi_train
 
 '''
 # Items to try
@@ -681,6 +675,7 @@ To understand the competition in more detail, please refer my other kernels too.
 '''
 <h3 style="color:red">If this kernel helps you, please upvote to keep me motivated :)<br>Thanks!</h3>
 '''
+
 '''
 # Lyft: Prediction with multi-mode confidence
 
@@ -711,164 +706,13 @@ See previous kernel [Lyft: Comprehensive guide to start competition](https://www
 '''
 
 #>
-!pip install pytorch-pfn-extras==0.3.1
-
-#>
-import gc
-import os
-from pathlib import Path
-import random
-import sys
-
-from tqdm.notebook import tqdm
-import numpy as np
-import pandas as pd
-import scipy as sp
-
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from IPython.core.display import display, HTML
-
-# --- plotly ---
-from plotly import tools, subplots
-import plotly.offline as py
-py.init_notebook_mode(connected=True)
-import plotly.graph_objs as go
-import plotly.express as px
-import plotly.figure_factory as ff
-import plotly.io as pio
-pio.templates.default = "plotly_dark"
-
-# --- models ---
-from sklearn import preprocessing
-from sklearn.model_selection import KFold
-import lightgbm as lgb
-import xgboost as xgb
-import catboost as cb
-
-# --- setup ---
-pd.set_option('max_columns', 50)
-
-#>
-import zarr
-
-import l5kit
-from l5kit.data import ChunkedDataset, LocalDataManager
-from l5kit.dataset import EgoDataset, AgentDataset
-
-from l5kit.rasterization import build_rasterizer
-from l5kit.configs import load_config_data
-from l5kit.visualization import draw_trajectory, TARGET_POINTS_COLOR
-from l5kit.geometry import transform_points
-from tqdm import tqdm
-from collections import Counter
-from l5kit.data import PERCEPTION_LABELS
-from prettytable import PrettyTable
 from l5kit.evaluation import write_pred_csv
-
-from matplotlib import animation, rc
-from IPython.display import HTML
-
-rc('animation', html='jshtml')
-print("l5kit version:", l5kit.__version__)
-
-#>
-import torch
-from pathlib import Path
-
-import pytorch_pfn_extras as ppe
-from math import ceil
-from pytorch_pfn_extras.training import IgniteExtensionsManager
-from pytorch_pfn_extras.training.triggers import MinValueTrigger
-
-from torch import nn, optim
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Subset
-import pytorch_pfn_extras.training.extensions as E
 
 '''
 ## Model
 
 pytorch model definition. Here model outputs both **multi-mode trajectory prediction & confidence of each trajectory**.
 '''
-
-#>
-# --- Model utils ---
-import torch
-from torchvision.models import resnet18
-from torch import nn
-from typing import Dict
-
-
-class LyftMultiModel(nn.Module):
-
-    def __init__(self, cfg: Dict, num_modes=3):
-        super().__init__()
-
-        # TODO: support other than resnet18?
-        backbone = resnet18(pretrained=True, progress=True)
-        self.backbone = backbone
-
-        num_history_channels = (cfg["model_params"]["history_num_frames"] + 1) * 2
-        num_in_channels = 3 + num_history_channels
-
-        self.backbone.conv1 = nn.Conv2d(
-            num_in_channels,
-            self.backbone.conv1.out_channels,
-            kernel_size=self.backbone.conv1.kernel_size,
-            stride=self.backbone.conv1.stride,
-            padding=self.backbone.conv1.padding,
-            bias=False,
-        )
-
-        # This is 512 for resnet18 and resnet34;
-        # And it is 2048 for the other resnets
-        backbone_out_features = 512
-
-        # X, Y coords for the future positions (output shape: Bx50x2)
-        self.future_len = cfg["model_params"]["future_num_frames"]
-        num_targets = 2 * self.future_len
-
-        # You can add more layers here.
-        self.head = nn.Sequential(
-            # nn.Dropout(0.2),
-            nn.Linear(in_features=backbone_out_features, out_features=4096),
-        )
-
-        self.num_preds = num_targets * num_modes
-        self.num_modes = num_modes
-
-        self.logit = nn.Linear(4096, out_features=self.num_preds + num_modes)
-
-    def forward(self, x):
-        x = self.backbone.conv1(x)
-        x = self.backbone.bn1(x)
-        x = self.backbone.relu(x)
-        x = self.backbone.maxpool(x)
-
-        x = self.backbone.layer1(x)
-        x = self.backbone.layer2(x)
-        x = self.backbone.layer3(x)
-        x = self.backbone.layer4(x)
-
-        x = self.backbone.avgpool(x)
-        x = torch.flatten(x, 1)
-
-        x = self.head(x)
-        x = self.logit(x)
-
-        # pred (bs)x(modes)x(time)x(2D coords)
-        # confidences (bs)x(modes)
-        bs, _ = x.shape
-        pred, confidences = torch.split(x, self.num_preds, dim=1)
-        pred = pred.view(bs, self.num_modes, self.future_len, 2)
-        assert confidences.shape == (bs, self.num_modes)
-        confidences = torch.softmax(confidences, dim=1)
-        return pred, confidences
-
-    
 
 #>
 # --- Utils ---
@@ -895,8 +739,6 @@ class DotDict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
-
-    
 
 #>
 # Referred https://www.kaggle.com/pestipeti/pytorch-baseline-inference
@@ -926,71 +768,19 @@ def run_prediction(predictor, data_loader):
     confs = np.concatenate(confidences_list)
     return timestamps, track_ids, coords, confs
 
-
 '''
 ## Configs
 '''
 
 #>
-# --- Lyft configs ---
-cfg = {
-    'format_version': 4,
-    'model_params': {
-        'model_architecture': 'resnet50',
-        'history_num_frames': 10,
-        'history_step_size': 1,
-        'history_delta_time': 0.1,
-        'future_num_frames': 50,
-        'future_step_size': 1,
-        'future_delta_time': 0.1
-    },
 
-    'raster_params': {
-        'raster_size': [224, 224],
-        'pixel_size': [0.5, 0.5],
-        'ego_center': [0.25, 0.5],
-        'map_type': 'py_semantic',
-        'satellite_map_key': 'aerial_map/aerial_map.png',
-        'semantic_map_key': 'semantic_map/semantic_map.pb',
-        'dataset_meta_key': 'meta.json',
-        'filter_agents_threshold': 0.5
-    },
+#Path Generation
+l5kitPath = (base_path / "../kaggle/input/lyft-motion-prediction-autonomous-vehicles").resolve()
 
-    'train_data_loader': {
-        'key': 'scenes/train.zarr',
-        'batch_size': 12,
-        'shuffle': True,
-        'num_workers': 4
-    },
-
-    'valid_data_loader': {
-        'key': 'scenes/validate.zarr',
-        'batch_size': 32,
-        'shuffle': False,
-        'num_workers': 4
-    },
-    
-    'test_data_loader': {
-        'key': 'scenes/test.zarr',
-        'batch_size': 8,
-        'shuffle': False,
-        'num_workers': 4
-    },
-
-    'train_params': {
-        'max_num_steps': 10000,
-        'checkpoint_every_n_steps': 5000,
-
-        # 'eval_every_n_steps': -1
-    }
-}
-
-
-#>
 flags_dict = {
-    "debug": False,
+    "debug": True,
     # --- Data configs ---
-    "l5kit_data_folder": "/kaggle/input/lyft-motion-prediction-autonomous-vehicles",
+    "l5kit_data_folder": str(l5kitPath),
     # --- Model configs ---
     "pred_mode": "multi",
     # --- Training configs ---
@@ -1024,18 +814,18 @@ debug = flags.debug
 
 #>
 # set env variable for data
-l5kit_data_folder = "/kaggle/input/lyft-motion-prediction-autonomous-vehicles"
+l5kit_data_folder = str(l5kitPath)
 os.environ["L5KIT_DATA_FOLDER"] = l5kit_data_folder
 dm = LocalDataManager(None)
 
 print("Load dataset...")
 default_test_cfg = {
-    'key': 'scenes/test.zarr',
+    'key': 'scenes/sample.zarr',
     'batch_size': 32,
     'shuffle': False,
     'num_workers': 4
 }
-test_cfg = cfg.get("test_data_loader", default_test_cfg)
+test_cfg = cfg.get("sample_data_loader", default_test_cfg)
 
 # Rasterizer
 rasterizer = build_rasterizer(cfg, dm)
@@ -1045,11 +835,11 @@ print(f"Loading from {test_path}")
 test_zarr = ChunkedDataset(dm.require(test_path)).open()
 print("test_zarr", type(test_zarr))
 test_mask = np.load(f"{l5kit_data_folder}/scenes/mask.npz")["arr_0"]
-test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer, agents_mask=test_mask)
+test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer)
+# test_agent_dataset = AgentDataset(cfg, test_zarr, rasterizer, agents_mask=test_mask)
 test_dataset = test_agent_dataset
-if debug:
-    # Only use 100 dataset for fast check...
-    test_dataset = Subset(test_dataset, np.arange(100))
+                                    #0, dataset size, number to skip to get ~5000
+test_dataset = Subset(test_dataset, np.arange(0, 111634, 23))
 test_loader = DataLoader(
     test_dataset,
     shuffle=test_cfg["shuffle"],
@@ -1074,7 +864,8 @@ if flags.pred_mode == "multi":
 else:
     raise ValueError(f"[ERROR] Unexpected value flags.pred_mode={flags.pred_mode}")
 
-pt_path = "/kaggle/input/lyft-resnet18-baseline/0918_predictor_full.pt"
+predictorFile = (base_path / "../kaggle-lyft-motion-prediction/notebooks/cnn-rnn-combo/results/multi_train/predictor.pt").resolve()
+pt_path = str(predictorFile)
 print(f"Loading from {pt_path}")
 predictor.load_state_dict(torch.load(pt_path))
 predictor.to(device)
@@ -1088,6 +879,46 @@ predictor.to(device)
 timestamps, track_ids, coords, confs = run_prediction(predictor, test_loader)
 
 #>
+
+# --- Pre Scoreing ---
+import math
+groundTruthCSVPath = (base_path / "../kaggle/input/RealDataSample.csv").resolve()
+gtFilePath = str(groundTruthCSVPath)
+gen = read_gt_csv(gtFilePath)
+scores = []
+
+startVal = 0
+endVal = 111634 #CHNAGE THIS IF YOU CHANGE THE DATAASET
+# numberOfSamples =
+# oneInEvery = math.floor(100/(numberOfSamples-1))
+oneInEvery = 23 #same as the subset function above
+
+#CHANGE THIS FIRST NUMBER IF YOU CHANGE THE PREDICTION SIZE:
+            #5081 is datsetTotal divided by nunberToSkip - This is how many samples we have
+allPredictions = coords.reshape(4854, 3, 50, 2)
+
+#index I is for ground truth looping
+#index J is for predictions and confs array
+
+j = 0
+for i in range(endVal):
+    testRow = next(gen)
+    if i % oneInEvery == 0:
+        gt = (testRow['coord'])
+        prediction = allPredictions[j]
+        firstRowOfConts = confs[j]
+        avails = np.transpose(testRow['avail'])
+#         print("Index: "+str(j+1))
+#         print(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
+        scores.append(metrics.neg_multi_log_likelihood(gt,prediction,firstRowOfConts,avails))
+        j += 1
+
+print("Final Log: "+str(i+1))
+print("Length: "+str(len(scores)))
+print(sum(scores) / len(scores))
+
+# Submit Score
+
 csv_path = "submission.csv"
 write_pred_csv(
     csv_path,

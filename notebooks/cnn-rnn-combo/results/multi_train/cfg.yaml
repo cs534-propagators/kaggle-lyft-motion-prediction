@@ -1,0 +1,15 @@
+format_version: 4
+model_params: {future_delta_time: 0.1, future_num_frames: 50, future_step_size: 1, history_delta_time: 0.1, history_num_frames: 10,
+  history_step_size: 1, model_architecture: resnet50}
+raster_params:
+  dataset_meta_key: meta.json
+  ego_center: [0.25, 0.5]
+  filter_agents_threshold: 0.5
+  map_type: py_semantic
+  pixel_size: [0.5, 0.5]
+  raster_size: [224, 224]
+  satellite_map_key: aerial_map/aerial_map.png
+  semantic_map_key: semantic_map/semantic_map.pb
+train_data_loader: {batch_size: 12, key: scenes/train.zarr, num_workers: 4, shuffle: true}
+train_params: {checkpoint_every_n_steps: 5000, max_num_steps: 10000}
+valid_data_loader: {batch_size: 32, key: scenes/validate.zarr, num_workers: 4, shuffle: false}
